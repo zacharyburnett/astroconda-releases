@@ -1,0 +1,54 @@
+name: build JWSTDP
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - jwstdp/**
+  pull_request:
+    paths:
+      - jwstdp/**
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: micromamba-shell {0}
+
+jobs:
+  changed:
+    name: get changed files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+            fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
+      - id: changed-files
+        run: |
+            if ${{ github.event_name == 'pull_request' }}; then
+                echo "changed_files=$(git diff --name-only -r HEAD^1 HEAD | xargs)" >> $GITHUB_OUTPUT
+            else
+                echo "changed_files=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }} | xargs)" >> $GITHUB_OUTPUT
+            fi
+      - run: |
+            for file in ${{ steps.changed-files.outputs.changed_files }}; do
+                echo "$file was changed"
+            done
+  build_jwstdp:
+    needs: [ changed ]
+    name: build (${{ matrix.runs-on }})
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      matrix:
+        runs-on: [ ubuntu-latest, macos-latest ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-name: jwstdp-${{ runner.os }}
+          environment-file: jwstdp/1.13.1/conda_python_${{ runner.os == 'macOS' && 'macos-' || '' }}stable-deps.txt
+          init-shell: none
+          generate-run-shell: true
